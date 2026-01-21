@@ -10,21 +10,27 @@
 <style>
 :root {
   --bg:#0b1220; --panel:#020617; --border:#1f2937; --text:#e5e7eb;
-  --green:#22c55e; --red:#ef4444; --orange:#f59e0b; --muted:#94a3b8;
+  --green:#22c55e; --red:#ef4444; --orange:#f59e0b;
 }
 body { margin:0; background:linear-gradient(#020617,#0b1220); color:var(--text); font-family:system-ui }
-header { position:sticky; top:0; background:#020617; padding:10px; z-index:10; border-bottom:1px solid var(--border); }
+header { position:sticky; top:0; background:#020617; padding:8px; z-index:10; border-bottom:1px solid var(--border); }
 .controls { display:flex; flex-wrap:wrap; gap:6px }
-input,select,button { background:#0f172a; color:#fff; border:1px solid var(--border); padding:6px 8px; border-radius:8px }
-.container { padding:8px }
-table { width:100%; border-collapse:collapse; font-size:12px }
-th,td { border:1px solid var(--border); padding:4px 6px; text-align:center; white-space:nowrap }
+input,select,button { background:#0f172a; color:#fff; border:1px solid var(--border); padding:5px 7px; border-radius:7px }
+.container { padding:6px }
+table { width:100%; border-collapse:collapse; font-size:13px }
+th,td { border:1px solid var(--border); padding:3px 4px; text-align:center; white-space:nowrap }
 th { background:#020617; position:sticky; top:60px }
 tr:nth-child(even) { background:#0f172a }
-.green{color:var(--green);font-weight:700}
-.red{color:var(--red);font-weight:700}
-.orange{color:var(--orange);font-weight:700}
-.bold{font-weight:800}
+
+.green{color:var(--green);font-weight:800}
+.red{color:var(--red);font-weight:800}
+.orange{color:var(--orange);font-weight:800}
+.bold{font-weight:900}
+
+.stockBtn{
+  background:none;border:none;cursor:pointer;
+  font-weight:900;font-size:14px;
+}
 .popup{position:fixed;bottom:20px;right:20px;background:#020617;border:1px solid var(--border);padding:10px;border-radius:12px;display:none}
 </style>
 </head>
@@ -64,7 +70,7 @@ tr:nth-child(even) { background:#0f172a }
 <th>Stock</th><th>Live</th><th>SL</th><th>Target</th><th>Vol(L)</th>
 <th>Today</th><th>1W</th><th>1M</th>
 <th>Support</th><th>Resistance</th>
-<th>RSI</th><th>Trend</th><th>EMA9</th><th>EMA21</th><th>Signal</th>
+<th>RSI</th><th>EMA9</th><th>EMA21</th><th>Signal</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
@@ -77,26 +83,28 @@ tr:nth-child(even) { background:#0f172a }
 const WORKER="https://red-tooth-e4f7.lovelyideas-in.workers.dev";
 const API=s=>`${WORKER}?symbol=${s}`;
 
+// 🔴 SET YOUR TELEGRAM DETAILS HERE
+const TELEGRAM_BOT = "";   // bot token
+const TELEGRAM_CHAT = "";  // chat id
+
 let BASE=["NIFTYBEES","TATAGOLD","TATSILV","HINDCOPPER","BSE","SAGILITY","CUPID","IDEA","BHARATCOAL","JPPOWER","HDFCBANK","SBIN","MON100","MEESHO","RVNL","ORIENTTECH","HARAFIN","RBLBANK","IRIS","GREAVESCOT","NTPCGREEN","TCS","KIMS"];
 let user=JSON.parse(localStorage.getItem("stocks")||"[]");
 let STOCKS=[...new Set([...BASE,...user])];
 
-let DB={}, filter="all", muted=false, last={}, queue=[];
+let DB={}, filter="all", muted=false, last={};
 
 const EMA=(a,p)=>{let k=2/(p+1),e=a[0];for(let v of a)e=v*k+e*(1-k);return e}
 const RSI=a=>{let g=0,l=0;for(let i=1;i<=14;i++){let d=a[i]-a[i-1];d>0?g+=d:l-=d}let rs=g/(l||1);return 100-(100/(1+rs))}
 
 function signal(e9,e21,r){ return e9>e21 && r>60 ? "BUY" : e9<e21 && r<40 ? "SELL" : "HOLD"; }
 
-function mock(){
- let arr=[],p=100+Math.random()*100;
- for(let i=60;i>=0;i--){
-  let d=new Date();d.setDate(d.getDate()-i);
-  let c=p+(Math.random()-0.5)*4;
-  arr.push({date:d.toISOString().slice(0,10),open:p,high:p+2,low:p-2,close:c,volume:Math.random()*1e7});
-  p=c;
- }
- return arr;
+function sendTelegram(msg){
+ if(!TELEGRAM_BOT || !TELEGRAM_CHAT) return;
+ fetch(`https://api.telegram.org/bot${TELEGRAM_BOT}/sendMessage`,{
+  method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({chat_id:TELEGRAM_CHAT,text:msg})
+ });
 }
 
 function parse(j){
@@ -104,29 +112,18 @@ function parse(j){
   let r=j.chart.result[0],q=r.indicators.quote[0];
   return r.timestamp.map((t,i)=>({date:new Date(t*1000).toISOString().slice(0,10),
   open:q.open[i],high:q.high[i],low:q.low[i],close:q.close[i],volume:q.volume?.[i]||0})).filter(x=>x.close);
- }catch{return mock();}
+ }catch{return []}
 }
 
 async function load(s){
  try{DB[s]=parse(await (await fetch(API(s))).json());}
- catch{DB[s]=mock();}
+ catch{DB[s]=[];}
 }
 
 function addStock(){
  let s=newStock.value.trim().toUpperCase();
  if(s&&!STOCKS.includes(s)){STOCKS.push(s);localStorage.setItem("stocks",JSON.stringify(STOCKS));load(s);}
  newStock.value="";
-}
-
-function alertSignal(s,sig){
- if(sig==="HOLD"||last[s]===sig)return;
- last[s]=sig;
- popupText.innerHTML=`<b class="${sig==='BUY'?'green':'red'}">${s} ${sig}</b>`;
- popup.style.display='block';
- if(!muted){
-  let a=new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-  a.loop=true;a.play();setTimeout(()=>a.pause(),3000);
- }
 }
 
 function render(){
@@ -137,27 +134,53 @@ function render(){
   if(selected)d=d.filter(x=>x.date<=selected);
   if(d.length<30)continue;
   if(q&&!s.toLowerCase().includes(q))continue;
-  let t=d.at(-1),cl=d.map(x=>x.close);
+
+  let t=d.at(-1), prev=d.at(-2), cl=d.map(x=>x.close);
   let e9=EMA(cl.slice(-9),9),e21=EMA(cl.slice(-21),21),r=RSI(cl.slice(-15));
   let m=d.slice(-21),w=d.slice(-6);
   let sup=Math.min(...m.map(x=>x.low)),res=Math.max(...m.map(x=>x.high));
   let sig=signal(e9,e21,r);
   if(filter==='buy'&&sig!=='BUY')continue;
   if(filter==='sell'&&sig!=='SELL')continue;
+
   let entry=t.close, range=t.high-t.low;
   let sl=sig==='BUY'?entry-range*0.8:entry+range*0.8;
   let tgt=sig==='BUY'?entry+range*1.2:entry-range*1.2;
   let vol=Math.round(t.volume/100000);
-  let chg=((entry-d.at(-2).close)/d.at(-2).close)*100;
+  let chg=((entry-prev.close)/prev.close)*100;
+
   let diff=(e9-e21)/e21*100;
-  let trend=diff>0.15?`<span class="green">↑</span>`:diff<-0.15?`<span class="red">↓</span>`:`<span class="orange">→</span>`;
-  rows.push({s,entry,sl,tgt,vol,chg,t,w,m,sup,res,r,e9,e21,sig,trend});
+  let arrow=diff>0.15?`<span class="green bold">↑</span>`:diff<-0.15?`<span class="red bold">↓</span>`:`<span class="orange bold">→</span>`;
+
+  rows.push({s,entry,sl,tgt,vol,chg,t,w,m,sup,res,r,e9,e21,sig,arrow});
  }
 
+ // sorting
+ let srt=sort.value;
+ if(srt==="volDesc")rows.sort((a,b)=>b.vol-a.vol);
+ if(srt==="volAsc")rows.sort((a,b)=>a.vol-b.vol);
+ if(srt==="rsiDesc")rows.sort((a,b)=>b.r-a.r);
+ if(srt==="rsiAsc")rows.sort((a,b)=>a.r-b.r);
+ if(srt==="priceDesc")rows.sort((a,b)=>b.entry-a.entry);
+ if(srt==="priceAsc")rows.sort((a,b)=>a.entry-b.entry);
+ if(srt==="chgDesc")rows.sort((a,b)=>b.chg-a.chg);
+ if(srt==="chgAsc")rows.sort((a,b)=>a.chg-b.chg);
+
  tbody.innerHTML=rows.map(r=>{
-  alertSignal(r.s,r.sig);
+  if(r.sig!=="HOLD" && last[r.s]!==r.sig){
+   last[r.s]=r.sig;
+   popupText.innerHTML=`<b class="${r.sig==='BUY'?'green':'red'}">${r.s} ${r.sig}</b>`;
+   popup.style.display='block';
+   if(!muted){
+    let a=new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    a.play();setTimeout(()=>a.pause(),3000);
+   }
+   sendTelegram(`${r.s} ${r.sig}\nEntry: ${r.entry.toFixed(2)} SL: ${r.sl.toFixed(2)} Target: ${r.tgt.toFixed(2)}`);
+  }
+
+  let cls=r.sig==="BUY"?"green":r.sig==="SELL"?"red":"";
   return `<tr>
-<td><button onclick="openTrade('${r.s}',${r.entry.toFixed(2)},${r.sl.toFixed(2)},${r.tgt.toFixed(2)})">${r.s}</button></td>
+<td><button class="stockBtn ${cls}" onclick="openTrade('${r.s}',${r.entry.toFixed(2)},${r.sl.toFixed(2)},${r.tgt.toFixed(2)})">${r.arrow} ${r.s}</button></td>
 <td>${r.entry.toFixed(2)}</td>
 <td>${r.sl.toFixed(2)}</td>
 <td>${r.tgt.toFixed(2)}</td>
@@ -168,7 +191,6 @@ function render(){
 <td>${r.sup.toFixed(2)}</td>
 <td>${r.res.toFixed(2)}</td>
 <td>${r.r.toFixed(1)}</td>
-<td>${r.trend}</td>
 <td>${r.e9.toFixed(2)}</td>
 <td>${r.e21.toFixed(2)}</td>
 <td class="${r.sig==='BUY'?'green':r.sig==='SELL'?'red':'orange'}">${r.sig}</td>
@@ -187,9 +209,18 @@ function screenshot(){
  });
 }
 
+function autoScreens(){
+ const times=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","13:00","14:00","14:30","15:00","15:15","15:30"];
+ setInterval(()=>{
+  let now=new Date();
+  let t=now.toTimeString().slice(0,5);
+  if(times.includes(t)) screenshot();
+ },60000);
+}
+
 function openTrade(s,e,sl,t){window.open(`trade.html?stock=${s}&entry=${e}&sl=${sl}&target=${t}`)}
 
-async function init(){for(let s of STOCKS)await load(s);render();setInterval(render,60000);}
+async function init(){for(let s of STOCKS)await load(s);render();setInterval(render,60000);autoScreens();}
 init();
 </script>
 </body>
