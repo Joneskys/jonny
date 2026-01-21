@@ -175,7 +175,9 @@ function render(){
     let a=new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
     a.play();setTimeout(()=>a.pause(),3000);
    }
-   sendTelegram(`${r.s} ${r.sig}\nEntry: ${r.entry.toFixed(2)} SL: ${r.sl.toFixed(2)} Target: ${r.tgt.toFixed(2)}`);
+   let cmd = r.sig === "BUY" ? "buy" : "sell";
+   sendTelegram(`/${cmd} ${r.s} @${r.entry.toFixed(2)} SL ${r.sl.toFixed(2)} Target ${r.tgt.toFixed(2)}`);
+
   }
 
   let cls=r.sig==="BUY"?"green":r.sig==="SELL"?"red":"";
