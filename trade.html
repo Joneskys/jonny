@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Trade Calculator</title>
+<style>
+body{background:#0b1220;color:white;font-family:sans-serif;padding:20px}
+input{padding:6px;margin:4px}
+.card{border:1px solid #1f2937;padding:10px;border-radius:10px;margin-top:10px}
+.green{color:#22c55e}.red{color:#ef4444}
+</style>
+</head>
+<body>
+
+<h2 id="stock"></h2>
+
+Buy: <input id="entry"><br>
+SL: <input id="sl"><br>
+Target: <input id="target"><br>
+Qty: <input id="qty" oninput="calcFromQty()"><br>
+Budget: <input id="budget" oninput="calcFromBudget()"><br>
+
+<div class="card" id="out"></div>
+
+<script>
+const p=new URLSearchParams(location.search);
+entry.value=p.get("entry");
+sl.value=p.get("sl");
+target.value=p.get("target");
+stock.textContent=p.get("stock");
+
+function round05(v){return Math.round(v*20)/20}
+
+function charges(turnover){
+ let brokerage=Math.min(20,turnover*0.0005);
+ let exch=turnover*0.0000297;
+ let sebi=turnover*0.000001;
+ let gst=0.18*(brokerage+exch+sebi);
+ return brokerage+exch+sebi+gst;
+}
+
+function calc(q){
+ let e=+entry.value,s=+sl.value,t=+target.value;
+ let buy=q*e*5;
+ let loss=(e-s)*q;
+ let profit=(t-e)*q;
+ let ch=charges(buy);
+ out.innerHTML=`
+ Turnover: ₹${buy.toFixed(2)}<br>
+ Charges: ₹${ch.toFixed(2)}<br>
+ <span class="red">SL Loss: ₹${(loss+ch).toFixed(2)}</span><br>
+ <span class="green">Target Profit: ₹${(profit-ch).toFixed(2)}</span>`;
+}
+
+function calcFromQty(){let q=+qty.value;budget.value=(q*entry.value).toFixed(2);calc(q)}
+function calcFromBudget(){let b=+budget.value;let q=Math.floor(b/entry.value);qty.value=q;calc(q)}
+</script>
+</body>
+</html>
